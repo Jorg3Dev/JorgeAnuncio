@@ -1,0 +1,168 @@
+if not Locales then Locales = {} end
+
+Locales['es'] = {
+    -- NUI General
+    app_title = "ANUNCIOS GTA",
+    app_subtitle = "Gestión y localización de negocios",
+    
+    -- Nav Tabs
+    nav_businesses = "Negocios",
+    nav_map = "Mapa",
+    nav_events = "Eventos",
+    nav_admin = "Admin",
+    
+    -- Admin Panel Dashboard
+    admin_panel_title = "Panel Admin",
+    admin_panel_desc = "Gestión de negocios",
+    admin_logout = "Salir",
+    admin_stat_total = "Total",
+    admin_stat_open = "Abiertos",
+    admin_stat_closed = "Cerrados",
+    admin_create_btn = "Crear Nuevo Negocio",
+    admin_create_sub = "Añadir un negocio al directorio",
+    admin_list_title = "Negocios registrados",
+    admin_empty_title = "Sin negocios",
+    admin_empty_desc = "Crea tu primer negocio para empezar",
+    admin_status_open = "Abierto",
+    admin_status_closed = "Cerrado",
+    admin_action_edit = "Editar negocio",
+    admin_action_delete = "Eliminar negocio",
+    admin_action_open = "Abrir negocio",
+    admin_action_close = "Cerrar negocio",
+    
+    -- Admin Modal Delete
+    admin_delete_title = "¿Eliminar Negocio?",
+    admin_delete_desc = "Esta acción no se puede deshacer. Se borrará del directorio.",
+    admin_btn_cancel = "Cancelar",
+    admin_btn_delete = "Eliminar",
+    
+    -- Admin Access
+    admin_access_denied = "Acceso Restringido",
+    admin_access_desc = "No tienes permisos de administrador para acceder a este panel.",
+
+    -- Admin Form
+    form_create_title = "Crear Nuevo Negocio",
+    form_edit_title = "Editar Negocio",
+    form_create_desc = "Rellena los datos para añadirlo al directorio.",
+    form_edit_desc = "Actualiza la información del negocio.",
+    
+    form_label_name = "Nombre del Negocio *",
+    form_ph_name = "Ej: Badulaque Central",
+    form_label_owner = "Propietario / Contacto *",
+    form_ph_owner = "Ej: Juan Pérez",
+    form_label_phone = "Teléfono (Opcional)",
+    form_ph_phone = "Ej: 555-0123",
+    form_label_cat = "Categoría *",
+    form_label_desc = "Descripción *",
+    form_ph_desc = "Breve descripción de lo que ofreces...",
+    form_label_coords = "Coordenadas *",
+    form_btn_location = "Usar mi ubicación",
+    form_label_media = "Imágenes y Medios",
+    form_media_logo = "Logo / Icono",
+    form_media_banner = "Cartel / Banner (Horizontal)",
+    form_media_gallery = "Galería",
+    form_btn_add = "+ Añadir",
+    form_label_job = "Restringir por Job (opcional)",
+    form_job_none = "-- Ninguno (Todos pueden ver) --",
+    form_job_hint = "Déjalo vacío para que todos puedan verlo",
+    form_label_offer = "Oferta Activa / Cupón (Opcional)",
+    form_ph_offer = "Ej: 50% de descuento hoy",
+    form_label_hiring = "¿Buscando Empleados?",
+    form_ph_hiring = "Ej: Buscamos mecánico, buen sueldo",
+    form_label_status = "Estado inicial",
+    form_btn_save = "Guardar Cambios",
+    form_btn_create = "Crear Negocio",
+    
+    form_err_name = "El nombre es obligatorio",
+    form_err_coords = "Faltan las coordenadas. Por favor, pulsa en 'Usar mi ubicación' abajo.",
+    
+    -- Categories
+    cat_tienda = "Tienda",
+    cat_restaurante = "Restaurante",
+    cat_taller = "Taller",
+    cat_bar = "Bar",
+    cat_club = "Club",
+    cat_gasolinera = "Gasolinera",
+    cat_otro = "Otro",
+
+    -- Business List
+    list_search = "Buscar negocio, categoría o dueño...",
+    list_category_label = "Categoría",
+    list_featured = "Nuevos y Destacados",
+    list_all = "Todos los Negocios",
+    list_all_cat = "Todas",
+    list_open_now = "Solo Abiertos",
+    list_sort_recent = "Más Recientes",
+    list_sort_rating = "Mejor Valorados",
+    list_sort_name = "Nombre A-Z",
+    list_sort_distance = "Más Cercanos",
+    list_filter_favs = "Favoritos",
+    list_filter_offers = "Ofertas",
+    list_filter_hiring = "Empleo",
+    list_empty_title = "No se encontraron negocios",
+    list_empty_desc = "Prueba con otra búsqueda o filtro",
+
+    -- Business Detail
+    detail_back = "Volver",
+    detail_reviews_count = "reseñas",
+    detail_no_reviews = "Sin reseñas aún",
+    detail_no_reviews_sub = "Sé el primero en dejar una reseña",
+    detail_btn_customize = "Personalizar Diseño",
+    detail_btn_event = "Publicar Nuevo Evento",
+    detail_gallery = "GALERÍA",
+    detail_info = "INFORMACIÓN Y CONTACTO",
+    detail_about = "ACERCA DE",
+    detail_mark_gps = "Marcar Ubicación",
+    detail_mark_gps_sub = "Trazar ruta en el GPS",
+    detail_hiring = "¡BUSCAMOS EMPLEADOS!",
+    detail_offer = "OFERTA ACTIVA",
+    
+    -- Detail Actions
+    action_close_biz = "Cerrar Negocio",
+    action_open_biz = "Abrir Negocio",
+    action_processing = "⏳ Espere por favor...",
+
+    -- Reviews
+    review_write = "ESCRIBIR RESEÑA",
+    review_name = "TU NOMBRE",
+    review_ph_name = "Ej: CJ...",
+    review_rating = "¿CÓMO CALIFICARÍAS TU EXPERIENCIA?",
+    review_comment = "COMENTARIO",
+    review_ph_comment = "¿Qué te pareció el negocio?",
+    review_btn_publish = "Publicar Reseña",
+    review_owner_reply = "Respuesta del Propietario",
+    review_btn_reply = "Responder",
+    review_ph_reply = "Tu respuesta...",
+    review_btn_send = "Enviar",
+    review_btn_cancel = "Cancelar",
+    review_btn_save = "Guardar",
+    review_delete_title = "¿Eliminar Reseña?",
+    
+    -- Event Modal
+    event_modal_title = "Publicar Nuevo Evento",
+    event_modal_desc = "Anuncia una fiesta, quedada o inauguración.",
+    event_title = "Título del Evento",
+    event_ph_title = "Ej: Fiesta de la espuma",
+    event_time = "Fecha y Hora",
+    event_ph_time = "Ej: Sábado a las 22:00",
+    event_desc = "Descripción",
+    event_ph_desc = "Detalles del evento...",
+    event_image = "Cartel (URL de la imagen opcional)",
+    event_btn_publish = "Publicar",
+
+    -- Map
+    map_title = "Directorio de Negocios",
+    
+    -- Server/Client Lua Notifications
+    notif_error = "Error",
+    notif_success = "Éxito",
+    notif_info = "Información",
+    notif_gps_set = "Ruta marcada en el GPS hacia %s",
+    notif_event_created = "Nuevo evento creado: %s",
+    notif_review_created = "Has dejado una reseña en %s",
+    notif_biz_created = "Negocio %s creado con éxito.",
+    notif_biz_updated = "Negocio %s actualizado.",
+    notif_biz_deleted = "Negocio eliminado.",
+    notif_biz_opened = "El negocio %s ha ABIERTO sus puertas.",
+    notif_biz_closed = "El negocio %s ha CERRADO.",
+}

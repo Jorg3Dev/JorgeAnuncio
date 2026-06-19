@@ -1,0 +1,624 @@
+-- Ensure Locales is available (lua54 global scope fix)
+if not Locales then Locales = {} end
+
+local MySQL = exports.oxmysql
+local ESX = nil
+local QBCore = nil
+
+-- ESX Framework Detection
+TriggerEvent('esx:getSharedObject', function(obj) ESX = obj end)
+if not ESX and GetResourceState('es_extended') == 'started' then
+    ESX = exports['es_extended']:getSharedObject()
+end
+
+-- QBCore / Qbox Framework Detection
+if GetResourceState('qb-core') == 'started' then
+    QBCore = exports['qb-core']:GetCoreObject()
+elseif GetResourceState('qbx-core') == 'started' then
+    -- Qbox compatibility layers load QBCore shared objects
+    QBCore = exports['qb-core']:GetCoreObject()
+end
+
+-- --- Standalone Server-Client Callback System ---
+local serverCallbacks = {}
+
+local function registerServerCallback(name, handler)
+    serverCallbacks[name] = handler
+end
+
+RegisterServerEvent('negocios_gta:server:triggerCallback')
+AddEventHandler('negocios_gta:server:triggerCallback', function(name, requestId, ...)
+    local src = source
+    if serverCallbacks[name] then
+        serverCallbacks[name](src, function(...)
+            TriggerClientEvent('negocios_gta:client:serverCallback', src, requestId, ...)
+        end, ...)
+    else
+        print(('Server callback %s does not exist'):format(name))
+    end
+end)
+
+local isDatabaseReady = false
+
+-- --- Data fetching helper ---
+local function fetchAllData(cb)
+    if not isDatabaseReady then
+        CreateThread(function()
+            while not isDatabaseReady do
+                Wait(100)
+            end
+            fetchAllData(cb)
+        end)
+        return
+    end
+
+    MySQL:query('SELECT * FROM JorgeDev_businesses', {}, function(businesses)
+        MySQL:query('SELECT * FROM JorgeDev_business_reviews', {}, function(reviews)
+            MySQL:query('SELECT * FROM JorgeDev_business_events', {}, function(events)
+                -- Format boolean from tinyint for JS
+                for _, biz in ipairs(businesses or {}) do
+                    biz.isOpen = (biz.isOpen == 1 or biz.isOpen == true or biz.isOpen == "1" or biz.isOpen == "true")
+                    -- Parse gallery JSON
+                    if biz.gallery and type(biz.gallery) == 'string' then
+                        local ok, parsed = pcall(json.decode, biz.gallery)
+                        if ok and type(parsed) == 'table' then
+                            biz.gallery = parsed
+                        else
+                            biz.gallery = {}
+                        end
+                    else
+                        biz.gallery = {}
+                    end
+                end
+                cb({
+                    businesses = businesses or {},
+                    reviews = reviews or {},
+                    events = events or {}
+                })
+            end)
+        end)
+    end)
+end
+
+-- --- Broadcast Sync ---
+local function broadcastSync()
+    fetchAllData(function(data)
+        TriggerClientEvent('negocios_gta:client:syncData', -1, data.businesses, data.reviews, data.events)
+    end)
+end
+
+RegisterServerEvent('negocios_gta:server:requestSync')
+AddEventHandler('negocios_gta:server:requestSync', function()
+    local src = source
+    fetchAllData(function(data)
+        TriggerClientEvent('negocios_gta:client:syncData', src, data.businesses, data.reviews, data.events)
+    end)
+end)
+
+-- --- Prepopulate default data if table is empty ---
+local function prepopulateData()
+    local createBusinessesTable = [[
+        CREATE TABLE IF NOT EXISTS `JorgeDev_businesses` (
+          `id` VARCHAR(50) NOT NULL,
+          `name` VARCHAR(100) NOT NULL,
+          `category` VARCHAR(50) NOT NULL,
+          `description` TEXT NOT NULL,
+          `x` FLOAT NOT NULL,
+          `y` FLOAT NOT NULL,
+          `isOpen` TINYINT(1) NOT NULL DEFAULT 1,
+          `owner` VARCHAR(100) NOT NULL,
+          `phone` VARCHAR(50) NOT NULL,
+          `job` VARCHAR(50) NOT NULL DEFAULT '',
+          `image` LONGTEXT,
+          `blipId` INT NOT NULL DEFAULT 0,
+          `createdAt` BIGINT NOT NULL,
+          PRIMARY KEY (`id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]]
+
+    local createReviewsTable = [[
+        CREATE TABLE IF NOT EXISTS `JorgeDev_business_reviews` (
+          `id` VARCHAR(50) NOT NULL,
+          `businessId` VARCHAR(50) NOT NULL,
+          `author` VARCHAR(100) NOT NULL,
+          `rating` INT NOT NULL,
+          `comment` TEXT NOT NULL,
+          `createdAt` BIGINT NOT NULL,
+          PRIMARY KEY (`id`),
+          CONSTRAINT `fk_jorgedev_business_reviews` FOREIGN KEY (`businessId`) REFERENCES `JorgeDev_businesses`(`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]]
+
+    local createEventsTable = [[
+        CREATE TABLE IF NOT EXISTS `JorgeDev_business_events` (
+          `id` VARCHAR(50) NOT NULL,
+          `businessId` VARCHAR(50) NOT NULL,
+          `title` VARCHAR(255) NOT NULL,
+          `description` TEXT NOT NULL,
+          `eventTime` VARCHAR(100) NOT NULL,
+          `image` VARCHAR(255) NOT NULL DEFAULT '',
+          `createdAt` BIGINT NOT NULL,
+          PRIMARY KEY (`id`),
+          CONSTRAINT `fk_jorgedev_business_events` FOREIGN KEY (`businessId`) REFERENCES `JorgeDev_businesses`(`id`) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    ]]
+
+    MySQL:query(createBusinessesTable, {}, function()
+        MySQL:query(createReviewsTable, {}, function()
+            MySQL:query(createEventsTable, {}, function()
+                MySQL:query("ALTER TABLE `JorgeDev_business_reviews` ADD COLUMN IF NOT EXISTS `identifier` VARCHAR(100) NOT NULL DEFAULT ''", {}, function() end)
+                MySQL:query("ALTER TABLE `JorgeDev_businesses` ADD COLUMN IF NOT EXISTS `job` VARCHAR(50) NOT NULL DEFAULT ''", {}, function()
+                    MySQL:query("ALTER TABLE `JorgeDev_businesses` ADD COLUMN IF NOT EXISTS `image` LONGTEXT", {}, function()
+                        MySQL:query("ALTER TABLE `JorgeDev_businesses` ADD COLUMN IF NOT EXISTS `blipId` INT NOT NULL DEFAULT 0", {}, function()
+                            MySQL:query("ALTER TABLE `JorgeDev_businesses` ADD COLUMN IF NOT EXISTS `gallery` LONGTEXT DEFAULT '[]'", {}, function()
+                                MySQL:query("ALTER TABLE `JorgeDev_businesses` ADD COLUMN IF NOT EXISTS `banner` LONGTEXT", {}, function()
+                                    print('[negocios_gta] Database tables verified.')
+                                    isDatabaseReady = true
+                                end)
+                            end)
+                        end)
+                    end)
+                end)
+            end)
+        end)
+    end)
+end
+
+local function getIdentifierValue(idStr)
+    local colonPos = string.find(idStr, ":")
+    if colonPos then
+        return string.sub(idStr, colonPos + 1)
+    end
+    return idStr
+end
+
+local function getPrimaryIdentifier(source)
+    local identifiers = GetPlayerIdentifiers(source)
+    if not identifiers then return "id:" .. tostring(source) end
+    
+    local types = {'license:', 'steam:', 'discord:', 'fivem:', 'live:', 'xbl:'}
+    for _, prefix in ipairs(types) do
+        for _, id in ipairs(identifiers) do
+            if string.sub(id, 1, string.len(prefix)) == prefix then
+                return id
+            end
+        end
+    end
+    
+    for _, id in ipairs(identifiers) do
+        if string.sub(id, 1, 3) ~= 'ip:' then
+            return id
+        end
+    end
+    return "id:" .. tostring(source)
+end
+
+local function checkAdminStatus(source)
+    local player = source
+    -- print("[negocios_gta] Checking admin status for source: " .. tostring(player))
+
+    -- 1. Check by identifiers
+    local identifiers = GetPlayerIdentifiers(player)
+    if identifiers then
+        for _, id in ipairs(identifiers) do
+            -- print("[negocios_gta] Player identifier: " .. tostring(id))
+            local cleanId = getIdentifierValue(id)
+            for _, allowedId in ipairs(Config.Admin.Identifiers) do
+                local cleanAllowedId = getIdentifierValue(allowedId)
+                if string.lower(id) == string.lower(allowedId) or string.lower(cleanId) == string.lower(cleanAllowedId) then
+                    -- print("[negocios_gta] MATCH FOUND! Player is Admin by identifier: " .. tostring(id))
+                    return true
+                end
+            end
+        end
+    end
+
+    -- 2. Check by ESX groups
+    if ESX then
+        local xPlayer = ESX.GetPlayerFromId(player)
+        if xPlayer then
+            local playerGroup = xPlayer.getGroup()
+            -- print("[negocios_gta] Player ESX group: " .. tostring(playerGroup))
+            for _, allowedGroup in ipairs(Config.Admin.ESXGroups) do
+                if playerGroup == allowedGroup then
+                    -- print("[negocios_gta] MATCH FOUND! Player is Admin by ESX group: " .. tostring(playerGroup))
+                    return true
+                end
+            end
+        end
+    end
+
+    -- Check by QBCore / Qbox permissions
+    if QBCore then
+        for _, allowedGroup in ipairs(Config.Admin.ESXGroups) do
+            if QBCore.Functions.HasPermission(player, allowedGroup) or QBCore.Functions.HasPermission(player, 'god') then
+                return true
+            end
+        end
+    end
+
+    -- 3. Check by ACE permissions
+    if Config.Admin.ACEPermissions then
+        for _, permission in ipairs(Config.Admin.ACEPermissions) do
+            if IsPlayerAceAllowed(tostring(player), permission) then
+                -- print("[negocios_gta] MATCH FOUND! Player is Admin by ACE permission: " .. tostring(permission))
+                return true
+            end
+        end
+    end
+
+    -- print("[negocios_gta] Player is NOT Admin.")
+    return false
+end
+
+-- --- Database Callbacks Registry ---
+registerServerCallback('negocios_gta:server:getData', function(source, cb)
+    local isAdmin = checkAdminStatus(source)
+    local playerJob = ''
+    local availableJobs = {}
+    
+    if ESX then
+        local xPlayer = ESX.GetPlayerFromId(source)
+        if xPlayer and xPlayer.getJob then
+            local job = xPlayer.getJob()
+            if job then
+                playerJob = job.name
+            end
+        end
+        if ESX.GetJobs then
+            for k, v in pairs(ESX.GetJobs()) do
+                availableJobs[k] = v.label
+            end
+        end
+    elseif QBCore then
+        local Player = QBCore.Functions.GetPlayer(source)
+        if Player and Player.PlayerData and Player.PlayerData.job then
+            playerJob = Player.PlayerData.job.name
+        end
+        local qbJobs = QBCore.Shared.Jobs
+        if qbJobs then
+            for k, v in pairs(qbJobs) do
+                availableJobs[k] = v.label or k
+            end
+        end
+    end
+
+    local playerLicense = getPrimaryIdentifier(source)
+
+    fetchAllData(function(data)
+        data.isAdmin = isAdmin
+        data.playerJob = playerJob
+        data.availableJobs = availableJobs
+
+        local myReviewIds = {}
+        for _, rev in ipairs(data.reviews) do
+            if rev.identifier == playerLicense then
+                table.insert(myReviewIds, rev.id)
+            end
+        end
+        data.myReviewIds = myReviewIds
+        data.locale = (Locales and Locales[Config.Language]) or (Locales and Locales['en']) or {}
+        data.categories = Config.Categories or {}
+
+        cb(data)
+    end)
+end)
+
+-- --- Server Events ---
+RegisterServerEvent('negocios_gta:server:saveBusiness')
+AddEventHandler('negocios_gta:server:saveBusiness', function(biz)
+    local openVal = biz.isOpen and 1 or 0
+    local jobVal = biz.job or ''
+    local imageVal = biz.image or ''
+    local bannerVal = biz.banner or ''
+    local blipIdVal = biz.blipId or 0
+    local galleryVal = biz.gallery or '[]'
+    if type(galleryVal) == 'table' then
+        galleryVal = json.encode(galleryVal)
+    end
+    MySQL:insert('INSERT INTO JorgeDev_businesses (id, name, category, description, x, y, isOpen, owner, phone, job, image, banner, blipId, gallery, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE name=?, category=?, description=?, x=?, y=?, isOpen=?, owner=?, phone=?, job=?, image=?, banner=?, blipId=?, gallery=?', {
+        biz.id, biz.name, biz.category, biz.description, biz.x, biz.y, openVal, biz.owner, biz.phone, jobVal, imageVal, bannerVal, blipIdVal, galleryVal, biz.createdAt,
+        biz.name, biz.category, biz.description, biz.x, biz.y, openVal, biz.owner, biz.phone, jobVal, imageVal, bannerVal, blipIdVal, galleryVal
+    }, function()
+        MySQL:single('SELECT * FROM JorgeDev_businesses WHERE id = ?', { biz.id }, function(savedBiz)
+            if savedBiz then
+                savedBiz.isOpen = (savedBiz.isOpen == 1 or savedBiz.isOpen == true)
+                -- Parse gallery JSON
+                if savedBiz.gallery and type(savedBiz.gallery) == 'string' then
+                    local ok, parsed = pcall(json.decode, savedBiz.gallery)
+                    if ok and type(parsed) == 'table' then
+                        savedBiz.gallery = parsed
+                    else
+                        savedBiz.gallery = {}
+                    end
+                else
+                    savedBiz.gallery = {}
+                end
+                TriggerClientEvent('negocios_gta:client:syncSingleBusiness', -1, savedBiz)
+            end
+        end)
+    end)
+end)
+
+RegisterServerEvent('negocios_gta:server:deleteBusiness')
+AddEventHandler('negocios_gta:server:deleteBusiness', function(id)
+    MySQL:execute('DELETE FROM JorgeDev_businesses WHERE id = ?', { id }, function()
+        broadcastSync()
+    end)
+end)
+
+local mutedPlayers = {}
+
+RegisterServerEvent('negocios_gta:server:setMuted')
+AddEventHandler('negocios_gta:server:setMuted', function(isMuted)
+    local src = source
+    mutedPlayers[src] = isMuted
+end)
+
+RegisterServerEvent('negocios_gta:server:sendPhoneNotification')
+AddEventHandler('negocios_gta:server:sendPhoneNotification', function(title, msg, icon)
+    local src = source
+    if Config.Notifications and Config.Notifications.Type == 'phone' then
+        pcall(function()
+            exports['qs-smartphone']:sendPhoneNotification(src, {
+                appId = 'negocios_gta',
+                title = title,
+                text = msg,
+                message = msg,
+                icon = icon or './img/apps/business.png',
+                closeTimeout = 5000
+            })
+        end)
+    end
+end)
+
+RegisterServerEvent('negocios_gta:server:toggleBusiness')
+AddEventHandler('negocios_gta:server:toggleBusiness', function(id)
+    MySQL:single('SELECT isOpen, name, image, description FROM JorgeDev_businesses WHERE id = ?', { id }, function(biz)
+        if biz then
+            local isOpen = biz.isOpen == 1 or biz.isOpen == true or biz.isOpen == "1" or biz.isOpen == "true"
+            local newStatus = isOpen and 0 or 1
+            MySQL:execute('UPDATE JorgeDev_businesses SET isOpen = ? WHERE id = ?', { newStatus, id }, function()
+                TriggerClientEvent('negocios_gta:client:syncToggleBusiness', -1, id, newStatus == 1, biz.name, biz.image, biz.description)
+                
+                -- Broadcast phone notifications directly from server side using Quasar server-side exports
+                if Config.Notifications and Config.Notifications.Type == 'phone' then
+                    if newStatus == 1 or Config.Notifications.NotifyOnToggle then
+                        local statusText = (newStatus == 1) and "🟢 ¡ABIERTO!" or "🔴 ¡CERRADO!"
+                        local cleanDesc = biz.description or ''
+                        if string.len(cleanDesc) > 80 then
+                            cleanDesc = string.sub(cleanDesc, 1, 77) .. "..."
+                        end
+                        local title = biz.name or 'Negocio'
+                        local msg = string.format("%s - %s", statusText, cleanDesc)
+                        
+                        local finalIcon = biz.image
+                        if not finalIcon or finalIcon == "" then
+                            finalIcon = './img/apps/business.png'
+                        elseif not string.find(finalIcon, "^http") then
+                            finalIcon = './img/apps/business.png'
+                        end
+
+                        local players = GetPlayers()
+                        for _, playerStr in ipairs(players) do
+                            local playerSrc = tonumber(playerStr)
+                            if playerSrc and not mutedPlayers[playerSrc] then
+                                pcall(function()
+                                    exports['qs-smartphone']:sendPhoneNotification(playerSrc, {
+                                        appId = 'negocios_gta',
+                                        title = title,
+                                        text = msg,
+                                        message = msg,
+                                        icon = finalIcon,
+                                        closeTimeout = 5000
+                                    })
+                                end)
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+    end)
+end)
+
+local businessCooldowns = {}
+
+RegisterServerEvent('negocios_gta:server:sendBusinessAnnouncement')
+AddEventHandler('negocios_gta:server:sendBusinessAnnouncement', function(id, message)
+    local src = source
+    local isAdmin = checkAdminStatus(src)
+    
+    -- Check cooldown first (admins bypass cooldowns)
+    local currentTime = os.time()
+    if not isAdmin and businessCooldowns[id] and currentTime < businessCooldowns[id] then
+        local timeLeft = businessCooldowns[id] - currentTime
+        local minutes = math.floor(timeLeft / 60)
+        local seconds = timeLeft % 60
+        local timeStr = ""
+        if minutes > 0 then
+            timeStr = string.format("%d min y %d seg", minutes, seconds)
+        else
+            timeStr = string.format("%d seg", seconds)
+        end
+        
+        -- Send notification to the sender telling them they are on cooldown
+        pcall(function()
+            if Config.Notifications.Type == 'phone' then
+                exports['qs-smartphone']:sendPhoneNotification(src, {
+                    appId = 'negocios_gta',
+                    title = "Anuncio bloqueado",
+                    text = string.format("Tu negocio está en cooldown. Espera %s.", timeStr),
+                    message = string.format("Tu negocio está en cooldown. Espera %s.", timeStr),
+                    icon = './img/apps/business.png',
+                    closeTimeout = 5000
+                })
+            else
+                TriggerClientEvent('negocios_gta:client:sendAnnouncementBroadcast', src, "Anuncio bloqueado", string.format("Tu negocio está en cooldown. Espera %s.", timeStr), './img/apps/business.png')
+            end
+        end)
+        return
+    end
+
+    -- Fetch business details to verify permissions and get metadata
+    MySQL:single('SELECT name, image, job FROM JorgeDev_businesses WHERE id = ?', { id }, function(biz)
+        if biz then
+            -- Verify if the player is admin or has the business job
+            local hasJob = false
+            if ESX then
+                local xPlayer = ESX.GetPlayerFromId(src)
+                if xPlayer and xPlayer.getJob then
+                    local job = xPlayer.getJob()
+                    if job and job.name == biz.job then
+                        hasJob = true
+                    end
+                end
+            elseif QBCore then
+                local Player = QBCore.Functions.GetPlayer(src)
+                if Player and Player.PlayerData and Player.PlayerData.job then
+                    if Player.PlayerData.job.name == biz.job then
+                        hasJob = true
+                    end
+                end
+            end
+            
+            if isAdmin or hasJob then
+                -- Set cooldown duration
+                local cooldownSecs = Config.AnnouncementCooldown or 300
+                if not isAdmin then
+                    businessCooldowns[id] = currentTime + cooldownSecs
+                end
+                
+                local title = string.format("📢 %s", biz.name or 'Anuncio')
+                local finalIcon = biz.image
+                if not finalIcon or finalIcon == "" then
+                    finalIcon = './img/apps/business.png'
+                elseif not string.find(finalIcon, "^http") then
+                    finalIcon = './img/apps/business.png'
+                end
+                
+                -- Send announcement
+                if Config.Notifications and Config.Notifications.Type == 'phone' then
+                    -- 1. Using Quasar server-side notification export for all active unmuted players
+                    local players = GetPlayers()
+                    for _, playerStr in ipairs(players) do
+                        local playerSrc = tonumber(playerStr)
+                        if playerSrc and not mutedPlayers[playerSrc] then
+                            pcall(function()
+                                exports['qs-smartphone']:sendPhoneNotification(playerSrc, {
+                                    appId = 'negocios_gta',
+                                    title = title,
+                                    text = message,
+                                    message = message,
+                                    icon = finalIcon,
+                                    closeTimeout = 8000
+                                })
+                            end)
+                        end
+                    end
+                else
+                    -- 2. Fallback to client-side notification trigger (like ox_lib or native GTA) for all players
+                    TriggerClientEvent('negocios_gta:client:sendAnnouncementBroadcast', -1, title, message, finalIcon)
+                end
+            else
+                print(string.format("[negocios_gta] Player %s tried to send announcement for %s without permission!", tostring(src), tostring(id)))
+            end
+        end
+    end)
+end)
+
+registerServerCallback('negocios_gta:server:addReview', function(source, cb, rev)
+    local playerLicense = getPrimaryIdentifier(source)
+    local serverTime = os.time() * 1000
+    rev.createdAt = serverTime -- Forzar tiempo del servidor
+
+    -- Buscar la reseña más reciente de este jugador en este negocio
+    MySQL:single('SELECT createdAt FROM JorgeDev_business_reviews WHERE businessId = ? AND identifier = ? ORDER BY createdAt DESC LIMIT 1', { rev.businessId, playerLicense }, function(existing)
+        if existing and existing.createdAt then
+            local timeDiff = serverTime - existing.createdAt
+            local oneDayMs = 24 * 60 * 60 * 1000
+            
+            if timeDiff < oneDayMs then
+                cb({ ok = false, error = 'limit_exceeded' })
+                return
+            end
+        end
+
+        MySQL:insert('INSERT INTO JorgeDev_business_reviews (id, businessId, author, rating, comment, identifier, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)', {
+            rev.id, rev.businessId, rev.author, rev.rating, rev.comment, playerLicense, rev.createdAt
+        }, function()
+            cb({ ok = true })
+            MySQL:single('SELECT * FROM JorgeDev_business_reviews WHERE id = ?', { rev.id }, function(savedRev)
+                if savedRev then
+                    TriggerClientEvent('negocios_gta:client:syncNewReview', -1, savedRev)
+                end
+            end)
+        end)
+    end)
+end)
+
+RegisterServerEvent('negocios_gta:server:deleteReview')
+AddEventHandler('negocios_gta:server:deleteReview', function(reviewId)
+    local src = source
+    local isAdmin = checkAdminStatus(src)
+
+    -- Get player license
+    local playerLicense = getPrimaryIdentifier(src)
+
+    -- Check ownership or admin
+    MySQL:single('SELECT identifier FROM JorgeDev_business_reviews WHERE id = ?', { reviewId }, function(rev)
+        if rev and (isAdmin or rev.identifier == playerLicense) then
+            MySQL:execute('DELETE FROM JorgeDev_business_reviews WHERE id = ?', { reviewId }, function()
+                TriggerClientEvent('negocios_gta:client:syncDeleteReview', -1, reviewId)
+            end)
+        end
+    end)
+end)
+
+RegisterServerEvent('negocios_gta:server:updateReview')
+AddEventHandler('negocios_gta:server:updateReview', function(data)
+    local src = source
+
+    local playerLicense = getPrimaryIdentifier(src)
+
+    MySQL:single('SELECT identifier FROM JorgeDev_business_reviews WHERE id = ?', { data.id }, function(rev)
+        if rev and rev.identifier == playerLicense then
+            MySQL:execute('UPDATE JorgeDev_business_reviews SET rating = ?, comment = ? WHERE id = ?', 
+                { data.rating, data.comment, data.id }, function()
+                    MySQL:single('SELECT * FROM JorgeDev_business_reviews WHERE id = ?', { data.id }, function(updatedRev)
+                        if updatedRev then
+                            TriggerClientEvent('negocios_gta:client:syncUpdateReview', -1, updatedRev)
+                        end
+                    end)
+                end)
+        end
+    end)
+end)
+
+RegisterServerEvent('negocios_gta:server:addEvent')
+AddEventHandler('negocios_gta:server:addEvent', function(ev)
+    local serverTime = os.time() * 1000
+    ev.createdAt = serverTime
+    
+    MySQL:insert('INSERT INTO JorgeDev_business_events (id, businessId, title, description, eventTime, image, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)', {
+        ev.id, ev.businessId, ev.title, ev.description, ev.eventTime, ev.image or '', ev.createdAt
+    }, function()
+        MySQL:single('SELECT * FROM JorgeDev_business_events WHERE id = ?', { ev.id }, function(savedEv)
+            if savedEv then
+                TriggerClientEvent('negocios_gta:client:syncNewEvent', -1, savedEv)
+            end
+        end)
+    end)
+end)
+
+RegisterServerEvent('negocios_gta:server:deleteEvent')
+AddEventHandler('negocios_gta:server:deleteEvent', function(eventId)
+    MySQL:execute('DELETE FROM JorgeDev_business_events WHERE id = ?', { eventId }, function()
+        TriggerClientEvent('negocios_gta:client:syncDeleteEvent', -1, eventId)
+    end)
+end)
+
+-- Initialize database check on start
+CreateThread(function()
+    prepopulateData()
+end)
