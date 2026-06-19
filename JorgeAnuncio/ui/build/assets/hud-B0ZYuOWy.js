@@ -1,1 +1,0 @@
-import{a as e,i as t,n,o as r,r as i}from"./src-BnLzmpna.js";var a=r(e(),1),o=r(t(),1),s=i();o.createRoot(document.getElementById(`root`)).render((0,s.jsx)(a.StrictMode,{children:(0,s.jsx)(n,{})}));
