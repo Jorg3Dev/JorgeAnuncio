@@ -95,6 +95,7 @@ Locales['en'] = {
     list_search = "Search business, category or owner...",
     list_category_label = "Category",
     list_featured = "New and Featured",
+    list_sponsored = "Sponsored Businesses",
     list_all = "All Businesses",
     list_all_cat = "All",
     list_open_now = "Open Only",
@@ -130,6 +131,15 @@ Locales['en'] = {
     detail_hiring = "WE'RE HIRING!",
     detail_offer = "ACTIVE OFFER",
     detail_tap_banner = "Tap to enlarge banner",
+    detail_ad_active_until = "Ad active until",
+    detail_promote_biz = "Promote Business",
+    detail_remove_ad = "Remove Sponsorship (Admin)",
+    detail_confirm_remove_ad_title = "Remove Sponsorship",
+    detail_confirm_remove_ad_msg = "Are you sure you want to remove VIP/Sponsorship from this business?",
+    detail_payment_error = "Payment Error",
+    detail_unknown_error = "Unknown error.",
+    detail_ad_activated = "Sponsorship Activated!",
+    detail_ad_activated_msg = "Your business is now VIP and appears on the front page.",
     
     -- Detail Actions
     action_close_biz = "Close Business",
@@ -177,9 +187,24 @@ Locales['en'] = {
     event_save_changes = "Save Changes",
     event_publish = "Publish Event",
     event_btn_publish = "Publish",
+    event_organized_by = "Organized by",
+    event_date_time = "Date and time",
+    event_about = "About the event",
+    event_gallery = "Gallery",
+    event_requirements = "Requirements",
+    event_route = "Mark Route on GPS",
+    event_hide = "Hide Event",
+    event_show = "Show Event",
+    event_edit = "Edit",
+    event_delete = "Delete",
+    event_hidden = "HIDDEN",
 
     -- Map
     map_title = "Business Directory",
+    map_filters = "Filters",
+    map_filters_active = "Filters (Active)",
+    map_all_categories = "All categories",
+    map_only_open = "Open Only",
     
     -- Server/Client Lua Notifications
     notif_error = "Error",

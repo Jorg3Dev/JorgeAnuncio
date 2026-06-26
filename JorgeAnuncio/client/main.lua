@@ -47,7 +47,10 @@ local function createOrUpdateBlip(biz)
 
     -- Blip label
     BeginTextCommandSetBlipName("STRING")
-    AddTextComponentString(biz.name .. (biz.isOpen and " (Abierto)" or " (Cerrado)"))
+    local formatAbierto = Config.Blips.FormatAbierto or "%s (Abierto)"
+    local formatCerrado = Config.Blips.FormatCerrado or "%s (Cerrado)"
+    local blipName = string.format(biz.isOpen and formatAbierto or formatCerrado, biz.name)
+    AddTextComponentString(blipName)
     EndTextCommandSetBlipName(blip)
 
     blips[biz.id] = blip
@@ -158,6 +161,7 @@ RegisterNUICallback('negocios_gta:getData', function(data, cb)
         dataToSend.playerJob = dbData and dbData.playerJob or ''
         dataToSend.availableJobs = dbData and dbData.availableJobs or {}
         dataToSend.myReviewIds = dbData and dbData.myReviewIds or {}
+        dataToSend.adsConfig = Config.Ads or {}
         
         cb(dataToSend)
         
@@ -181,6 +185,11 @@ RegisterNUICallback('negocios_gta:deleteBusinessFromServer', function(data, cb)
     cb('ok')
 end)
 
+RegisterNUICallback('negocios_gta:removeAd', function(data, cb)
+    TriggerServerEvent('negocios_gta:server:removeAd', data.id)
+    cb('ok')
+end)
+
 RegisterNUICallback('negocios_gta:toggleBusinessOnServer', function(data, cb)
     TriggerServerEvent('negocios_gta:server:toggleBusiness', data.id)
     cb('ok')
@@ -188,9 +197,12 @@ end)
 
 RegisterNUICallback('negocios_gta:sendBusinessAnnouncement', function(data, cb)
     if data and data.id and data.message then
-        TriggerServerEvent('negocios_gta:server:sendBusinessAnnouncement', data.id, data.message)
+        triggerServerCallback('negocios_gta:server:sendBusinessAnnouncement', function(result)
+            cb(result or { ok = true })
+        end, data.id, data.message)
+    else
+        cb({ ok = false, error = "Datos inválidos" })
     end
-    cb('ok')
 end)
 
 RegisterNUICallback('negocios_gta:addReviewToServer', function(data, cb)
@@ -241,11 +253,12 @@ RegisterNUICallback('negocios_gta:getPlayerLocation', function(data, cb)
     })
 end)
 
-RegisterNUICallback('negocios_gta:setWaypoint', function(data, cb)
-    if data and data.x and data.y then
-        SetNewWaypoint(data.x + 0.0, data.y + 0.0)
-    end
-    cb('ok')
+
+
+RegisterNUICallback('negocios_gta:buyFeaturedAd', function(data, cb)
+    triggerServerCallback('negocios_gta:server:buyFeaturedAd', function(result)
+        cb(result or { ok = false, error = 'unknown' })
+    end, data.id)
 end)
 
 local inputFocused = false
@@ -259,6 +272,13 @@ end)
 RegisterNUICallback('negocios_gta:playSound', function(data, cb)
     if data and data.name and data.dict then
         PlaySoundFrontend(-1, data.name, data.dict, true)
+    end
+    cb('ok')
+end)
+
+RegisterNUICallback('negocios_gta:showNotification', function(data, cb)
+    if data and data.msg then
+        ShowNotification(data.title or 'Sistema', data.msg, data.type or 'info', data.icon)
     end
     cb('ok')
 end)
@@ -325,8 +345,7 @@ end)
 RegisterNUICallback('negocios_gta:setWaypoint', function(data, cb)
     if data and data.x and data.y then
         SetNewWaypoint(data.x + 0.0, data.y + 0.0)
-        local L = Locales[Config.Language] or Locales['en']
-        ShowNotification(L.notif_success, string.format(L.notif_gps_set, data.name or 'el negocio'), 'success', 'location-dot')
+        ShowNotification('GPS', 'Ruta marcada hacia ' .. (data.name or 'el destino'), 'info', data.image)
     end
     cb('ok')
 end)

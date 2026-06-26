@@ -11,16 +11,20 @@ shared_scripts {
 client_scripts {
     'locales/en.lua',
     'locales/es.lua',
+    'locales/it.lua',
+    'locales/de.lua',
     'client/main.lua',
 }
 
 server_scripts {
     'locales/en.lua',
     'locales/es.lua',
+    'locales/it.lua',
+    'locales/de.lua',
     'server/main.lua',
 }
 
-ui_page 'ui/build/hud.html'
+ui_page 'ui/build/index.html?hud=true'
 
 files {
     'ui/build/**/*',

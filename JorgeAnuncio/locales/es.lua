@@ -95,6 +95,7 @@ Locales['es'] = {
     list_search = "Buscar negocio, categoría o dueño...",
     list_category_label = "Categoría",
     list_featured = "Nuevos y Destacados",
+    list_sponsored = "Negocios Patrocinados",
     list_all = "Todos los Negocios",
     list_all_cat = "Todas",
     list_open_now = "Solo Abiertos",
@@ -130,6 +131,15 @@ Locales['es'] = {
     detail_hiring = "¡BUSCAMOS EMPLEADOS!",
     detail_offer = "OFERTA ACTIVA",
     detail_tap_banner = "Tocar para ampliar el cartel",
+    detail_ad_active_until = "Anuncio activo hasta",
+    detail_promote_biz = "Promocionar Negocio",
+    detail_remove_ad = "Quitar Patrocinio (Admin)",
+    detail_confirm_remove_ad_title = "Quitar Patrocinio",
+    detail_confirm_remove_ad_msg = "¿Seguro que quieres quitar el VIP/Patrocinio a este negocio?",
+    detail_payment_error = "Error de Pago",
+    detail_unknown_error = "Error desconocido.",
+    detail_ad_activated = "¡Patrocinio Activado!",
+    detail_ad_activated_msg = "Tu negocio ahora es VIP y aparece en la portada.",
     
     -- Detail Actions
     action_close_biz = "Cerrar Negocio",
@@ -177,9 +187,24 @@ Locales['es'] = {
     event_save_changes = "Guardar Cambios",
     event_publish = "Publicar Evento",
     event_btn_publish = "Publicar",
+    event_organized_by = "Organizado por",
+    event_date_time = "Fecha y hora",
+    event_about = "Acerca del evento",
+    event_gallery = "Galería",
+    event_requirements = "Requisitos",
+    event_route = "Marcar Ruta en GPS",
+    event_hide = "Ocultar Evento",
+    event_show = "Mostrar Evento",
+    event_edit = "Editar",
+    event_delete = "Eliminar",
+    event_hidden = "OCULTO",
 
     -- Map
     map_title = "Directorio de Negocios",
+    map_filters = "Filtros",
+    map_filters_active = "Filtros (Activos)",
+    map_all_categories = "Todas las categorías",
+    map_only_open = "Solo Abiertos",
     
     -- Server/Client Lua Notifications
     notif_error = "Error",

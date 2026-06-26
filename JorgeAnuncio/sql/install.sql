@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS `JorgeDev_businesses` (
   `owner` VARCHAR(100) NOT NULL,
   `phone` VARCHAR(50) NOT NULL,
   `job` VARCHAR(50) NOT NULL DEFAULT '',
-  `createdAt` BIGINT NOT NULL,
+  `featured_until` DATETIME NULL DEFAULT NULL,
+  `createdAt` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -19,7 +20,7 @@ CREATE TABLE IF NOT EXISTS `JorgeDev_business_reviews` (
   `author` VARCHAR(100) NOT NULL,
   `rating` INT NOT NULL,
   `comment` TEXT NOT NULL,
-  `createdAt` BIGINT NOT NULL,
+  `createdAt` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   CONSTRAINT `fk_jorgedev_business_reviews` FOREIGN KEY (`businessId`) REFERENCES `JorgeDev_businesses`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -35,7 +36,7 @@ CREATE TABLE IF NOT EXISTS `JorgeDev_business_events` (
   `price` VARCHAR(50) NOT NULL DEFAULT 'Gratis',
   `location` VARCHAR(100) NOT NULL DEFAULT '',
   `requirements` VARCHAR(100) NOT NULL DEFAULT '',
-  `createdAt` BIGINT NOT NULL,
+  `createdAt` DATETIME DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   CONSTRAINT `fk_jorgedev_business_events` FOREIGN KEY (`businessId`) REFERENCES `JorgeDev_businesses`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -62,6 +62,22 @@ local function SendDiscordLog(title, message, color)
     }), { ['Content-Type'] = 'application/json' })
 end
 
+local function parseCreatedAt(msOrString)
+    if not msOrString then return os.time() * 1000 end
+    if type(msOrString) == 'string' then
+        local y, m, d, h, min, s = msOrString:match("(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
+        if y then
+            return os.time({year=y, month=m, day=d, hour=h, min=min, sec=s}) * 1000
+        end
+    elseif type(msOrString) == 'number' then
+        if msOrString < 9999999999 then
+            return msOrString * 1000
+        end
+        return msOrString
+    end
+    return os.time() * 1000
+end
+
 -- --- Data fetching helper ---
 local function fetchAllData(cb)
     if not isDatabaseReady then
@@ -79,7 +95,22 @@ local function fetchAllData(cb)
             MySQL:query('SELECT * FROM JorgeDev_business_events', {}, function(events)
                 -- Format boolean from tinyint for JS
                 for _, biz in ipairs(businesses or {}) do
+                    biz.createdAt = parseCreatedAt(biz.createdAt)
                     biz.isOpen = (biz.isOpen == 1 or biz.isOpen == true or biz.isOpen == "1" or biz.isOpen == "true")
+                    
+                    if biz.featured_until then
+                        if type(biz.featured_until) == 'string' then
+                            local y, m, d, h, min, s = biz.featured_until:match("(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
+                            if y then
+                                biz.featured_until = os.time({year=y, month=m, day=d, hour=h, min=min, sec=s})
+                            end
+                        elseif type(biz.featured_until) == 'number' then
+                            if biz.featured_until > 9999999999 then
+                                biz.featured_until = math.floor(biz.featured_until / 1000)
+                            end
+                        end
+                    end
+                    
                     -- Parse gallery JSON
                     if biz.gallery and type(biz.gallery) == 'string' then
                         local ok, parsed = pcall(json.decode, biz.gallery)
@@ -93,7 +124,12 @@ local function fetchAllData(cb)
                     end
                 end
                 
+                for _, rev in ipairs(reviews or {}) do
+                    rev.createdAt = parseCreatedAt(rev.createdAt)
+                end
+                
                 for _, ev in ipairs(events or {}) do
+                    ev.createdAt = parseCreatedAt(ev.createdAt)
                     ev.isActive = (ev.isActive == 1 or ev.isActive == true or ev.isActive == "1" or ev.isActive == "true")
                     -- For compatibility with UI which expects 'time'
                     ev.time = ev.eventTime
@@ -140,7 +176,7 @@ local function prepopulateData()
           `job` VARCHAR(50) NOT NULL DEFAULT '',
           `image` LONGTEXT,
           `blipId` INT NOT NULL DEFAULT 0,
-          `createdAt` BIGINT NOT NULL,
+          `createdAt` DATETIME DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (`id`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     ]]
@@ -152,7 +188,7 @@ local function prepopulateData()
           `author` VARCHAR(100) NOT NULL,
           `rating` INT NOT NULL,
           `comment` TEXT NOT NULL,
-          `createdAt` BIGINT NOT NULL,
+          `createdAt` DATETIME DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (`id`),
           CONSTRAINT `fk_jorgedev_business_reviews` FOREIGN KEY (`businessId`) REFERENCES `JorgeDev_businesses`(`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -167,7 +203,7 @@ local function prepopulateData()
           `eventTime` VARCHAR(100) NOT NULL,
           `image` VARCHAR(255) NOT NULL DEFAULT '',
           `isActive` TINYINT(1) NOT NULL DEFAULT 1,
-          `createdAt` BIGINT NOT NULL,
+          `createdAt` DATETIME DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (`id`),
           CONSTRAINT `fk_jorgedev_business_events` FOREIGN KEY (`businessId`) REFERENCES `JorgeDev_businesses`(`id`) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -188,8 +224,12 @@ local function prepopulateData()
                         MySQL:query("ALTER TABLE `JorgeDev_businesses` ADD COLUMN IF NOT EXISTS `blipId` INT NOT NULL DEFAULT 0", {}, function()
                             MySQL:query("ALTER TABLE `JorgeDev_businesses` ADD COLUMN IF NOT EXISTS `gallery` LONGTEXT DEFAULT '[]'", {}, function()
                                 MySQL:query("ALTER TABLE `JorgeDev_businesses` ADD COLUMN IF NOT EXISTS `banner` LONGTEXT", {}, function()
-                                    print('[negocios_gta] Database tables verified.')
-                                    isDatabaseReady = true
+                                    MySQL:query("ALTER TABLE `JorgeDev_businesses` ADD COLUMN IF NOT EXISTS `featured_until` DATETIME NULL DEFAULT NULL", {}, function()
+                                        MySQL:query("ALTER TABLE `JorgeDev_businesses` MODIFY COLUMN `featured_until` DATETIME NULL DEFAULT NULL", {}, function()
+                                            print('[negocios_gta] Database tables verified.')
+                                            isDatabaseReady = true
+                                        end)
+                                    end)
                                 end)
                             end)
                         end)
@@ -352,10 +392,8 @@ AddEventHandler('negocios_gta:server:saveBusiness', function(biz)
     if type(galleryVal) == 'table' then
         galleryVal = json.encode(galleryVal)
     end
-    MySQL:insert('INSERT INTO JorgeDev_businesses (id, name, category, description, x, y, isOpen, owner, phone, job, image, banner, blipId, gallery, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE name=?, category=?, description=?, x=?, y=?, isOpen=?, owner=?, phone=?, job=?, image=?, banner=?, blipId=?, gallery=?', {
-        biz.id, biz.name, biz.category, biz.description, biz.x, biz.y, openVal, biz.owner, biz.phone, jobVal, imageVal, bannerVal, blipIdVal, galleryVal, biz.createdAt,
-        biz.name, biz.category, biz.description, biz.x, biz.y, openVal, biz.owner, biz.phone, jobVal, imageVal, bannerVal, blipIdVal, galleryVal
-    }, function()
+
+    local function afterSave()
         MySQL:single('SELECT * FROM JorgeDev_businesses WHERE id = ?', { biz.id }, function(savedBiz)
             if savedBiz then
                 savedBiz.isOpen = (savedBiz.isOpen == 1 or savedBiz.isOpen == true)
@@ -370,10 +408,35 @@ AddEventHandler('negocios_gta:server:saveBusiness', function(biz)
                 else
                     savedBiz.gallery = {}
                 end
+                print(string.format("[negocios_gta] Business saved: %s | category: %s", savedBiz.name, savedBiz.category))
                 TriggerClientEvent('negocios_gta:client:syncSingleBusiness', -1, savedBiz)
                 SendDiscordLog("Negocio Guardado/Creado", "El negocio **" .. savedBiz.name .. "** ha sido guardado por un administrador.", Config.Logs.Colors.CreateBusiness)
+            else
+                print("[negocios_gta] ERROR: Business not found after save: " .. tostring(biz.id))
             end
         end)
+    end
+
+    -- Check if business already exists
+    MySQL:single('SELECT id FROM JorgeDev_businesses WHERE id = ?', { biz.id }, function(existing)
+        if existing then
+            -- UPDATE existing business
+            MySQL:execute('UPDATE JorgeDev_businesses SET name=?, category=?, description=?, x=?, y=?, isOpen=?, owner=?, phone=?, job=?, image=?, banner=?, blipId=?, gallery=? WHERE id=?', {
+                biz.name, biz.category, biz.description, biz.x, biz.y, openVal, biz.owner, biz.phone, jobVal, imageVal, bannerVal, blipIdVal, galleryVal, biz.id
+            }, function(rowsChanged)
+                print(string.format("[negocios_gta] UPDATE executed for %s, rows affected: %s, new category: %s", tostring(biz.name), tostring(rowsChanged), tostring(biz.category)))
+                afterSave()
+            end)
+        else
+            -- INSERT new business
+            local createdAtVal = biz.createdAt or (os.time() * 1000)
+            MySQL:execute('INSERT INTO JorgeDev_businesses (id, name, category, description, x, y, isOpen, owner, phone, job, image, banner, blipId, gallery, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(? / 1000))', {
+                biz.id, biz.name, biz.category, biz.description, biz.x, biz.y, openVal, biz.owner, biz.phone, jobVal, imageVal, bannerVal, blipIdVal, galleryVal, createdAtVal
+            }, function(rowsChanged)
+                print(string.format("[negocios_gta] INSERT executed for %s, rows affected: %s", tostring(biz.name), tostring(rowsChanged)))
+                afterSave()
+            end)
+        end
     end)
 end)
 
@@ -469,9 +532,7 @@ end)
 
 local businessCooldowns = {}
 
-RegisterServerEvent('negocios_gta:server:sendBusinessAnnouncement')
-AddEventHandler('negocios_gta:server:sendBusinessAnnouncement', function(id, message)
-    local src = source
+registerServerCallback('negocios_gta:server:sendBusinessAnnouncement', function(src, cb, id, message)
     local isAdmin = checkAdminStatus(src)
     
     -- Check cooldown first (admins bypass cooldowns)
@@ -487,21 +548,8 @@ AddEventHandler('negocios_gta:server:sendBusinessAnnouncement', function(id, mes
             timeStr = string.format("%d seg", seconds)
         end
         
-        -- Send notification to the sender telling them they are on cooldown
-        pcall(function()
-            if Config.Notifications.Type == 'phone' then
-                exports['qs-smartphone']:sendPhoneNotification(src, {
-                    appId = 'negocios_gta',
-                    title = "Anuncio bloqueado",
-                    text = string.format("Tu negocio está en cooldown. Espera %s.", timeStr),
-                    message = string.format("Tu negocio está en cooldown. Espera %s.", timeStr),
-                    icon = './img/apps/business.png',
-                    closeTimeout = 5000
-                })
-            else
-                TriggerClientEvent('negocios_gta:client:sendAnnouncementBroadcast', src, "Anuncio bloqueado", string.format("Tu negocio está en cooldown. Espera %s.", timeStr), './img/apps/business.png')
-            end
-        end)
+        -- We no longer need to send a phone notification because the UI will handle it
+        cb({ ok = false, error = string.format("Tu negocio está en cooldown. Espera %s.", timeStr), cooldown = timeLeft })
         return
     end
 
@@ -567,11 +615,132 @@ AddEventHandler('negocios_gta:server:sendBusinessAnnouncement', function(id, mes
                     -- 2. Fallback to client-side notification trigger (like ox_lib or native GTA) for all players
                     TriggerClientEvent('negocios_gta:client:sendAnnouncementBroadcast', -1, title, message, finalIcon)
                 end
+                
+                cb({ ok = true, cooldown = cooldownSecs })
             else
                 print(string.format("[negocios_gta] Player %s tried to send announcement for %s without permission!", tostring(src), tostring(id)))
+                cb({ ok = false, error = "No tienes permiso para hacer esto." })
+            end
+        else
+            cb({ ok = false, error = "Negocio no encontrado." })
+        end
+    end)
+end)
+
+registerServerCallback('negocios_gta:server:buyFeaturedAd', function(source, cb, businessId)
+    local src = source
+    if not Config.Ads or not Config.Ads.Enabled then
+        cb({ ok = false, error = 'El sistema de patrocinados está desactivado.' })
+        return
+    end
+
+    local cost = Config.Ads.Cost or 50000
+    local durationSecs = (Config.Ads.DurationHours or 24) * 3600
+
+    MySQL:single('SELECT name, job, featured_until FROM JorgeDev_businesses WHERE id = ?', { businessId }, function(biz)
+        if not biz then
+            cb({ ok = false, error = 'Negocio no encontrado.' })
+            return
+        end
+
+        local currentTime = os.time()
+        local currentUntilUnix = 0
+        if biz.featured_until then
+            if type(biz.featured_until) == 'string' then
+                local y, m, d, h, min, s = biz.featured_until:match("(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)")
+                if y then currentUntilUnix = os.time({year=y, month=m, day=d, hour=h, min=min, sec=s}) end
+            elseif type(biz.featured_until) == 'number' then
+                currentUntilUnix = biz.featured_until > 9999999999 and math.floor(biz.featured_until / 1000) or biz.featured_until
+            end
+        end
+
+        if currentUntilUnix > currentTime then
+            cb({ ok = false, error = 'El negocio ya está patrocinado actualmente.' })
+            return
+        end
+
+        local function applyAd()
+            local newUntil = os.date('%Y-%m-%d %H:%M:%S', currentTime + durationSecs)
+            MySQL:update('UPDATE JorgeDev_businesses SET featured_until = ? WHERE id = ?', { newUntil, businessId }, function(affectedRows)
+                if affectedRows > 0 then
+                    cb({ ok = true })
+                    SendDiscordLog("Negocio Patrocinado", "El negocio **" .. (biz.name or businessId) .. "** ha comprado publicidad por " .. cost .. "$ (" .. (Config.Ads.DurationHours or 24) .. "h).", 3066993)
+                    broadcastSync()
+                else
+                    cb({ ok = false, error = 'Error al actualizar la base de datos.' })
+                end
+            end)
+        end
+
+        local function chargeBank(xPlayer, qbPlayer)
+            if ESX and xPlayer then
+                local bank = xPlayer.getAccount('bank')
+                if bank and bank.money >= cost then
+                    xPlayer.removeAccountMoney('bank', cost)
+                    applyAd()
+                else
+                    cb({ ok = false, error = 'No tienes suficiente dinero en el banco personal.' })
+                end
+            elseif QBCore and qbPlayer then
+                local bank = qbPlayer.PlayerData.money['bank']
+                if bank >= cost then
+                    qbPlayer.Functions.RemoveMoney('bank', cost, "featured-ad")
+                    applyAd()
+                else
+                    cb({ ok = false, error = 'No tienes suficiente dinero en el banco personal.' })
+                end
+            else
+                cb({ ok = false, error = 'Error en framework.' })
+            end
+        end
+
+        if Config.Ads.PaymentAccount == 'society' and biz.job and biz.job ~= '' then
+            if ESX then
+                local xPlayer = ESX.GetPlayerFromId(src)
+                TriggerEvent('esx_addonaccount:getSharedAccount', 'society_' .. biz.job, function(account)
+                    if account then
+                        if account.money >= cost then
+                            account.removeMoney(cost)
+                            applyAd()
+                        else
+                            cb({ ok = false, error = 'La sociedad no tiene fondos suficientes (' .. cost .. '$).' })
+                        end
+                    else
+                        chargeBank(xPlayer, nil)
+                    end
+                end)
+            elseif QBCore then
+                local Player = QBCore.Functions.GetPlayer(src)
+                local balance = exports['qb-management']:GetAccount(biz.job)
+                if balance and balance >= cost then
+                    exports['qb-management']:RemoveMoney(biz.job, cost)
+                    applyAd()
+                else
+                    if balance then
+                        cb({ ok = false, error = 'La sociedad no tiene fondos suficientes (' .. cost .. '$).' })
+                    else
+                        chargeBank(nil, Player)
+                    end
+                end
+            end
+        else
+            if ESX then
+                chargeBank(ESX.GetPlayerFromId(src), nil)
+            elseif QBCore then
+                chargeBank(nil, QBCore.Functions.GetPlayer(src))
             end
         end
     end)
+end)
+
+RegisterServerEvent('negocios_gta:server:removeAd')
+AddEventHandler('negocios_gta:server:removeAd', function(businessId)
+    local src = source
+    if checkAdminStatus(src) then
+        MySQL:execute('UPDATE JorgeDev_businesses SET featured_until = NULL WHERE id = ?', { businessId }, function()
+            broadcastSync()
+        end)
+    end
 end)
 
 registerServerCallback('negocios_gta:server:addReview', function(source, cb, rev)
@@ -591,7 +760,7 @@ registerServerCallback('negocios_gta:server:addReview', function(source, cb, rev
             end
         end
 
-        MySQL:insert('INSERT INTO JorgeDev_business_reviews (id, businessId, author, rating, comment, identifier, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?)', {
+        MySQL:insert('INSERT INTO JorgeDev_business_reviews (id, businessId, author, rating, comment, identifier, createdAt) VALUES (?, ?, ?, ?, ?, ?, FROM_UNIXTIME(? / 1000))', {
             rev.id, rev.businessId, rev.author, rev.rating, rev.comment, playerLicense, rev.createdAt
         }, function()
             cb({ ok = true })
@@ -647,7 +816,7 @@ AddEventHandler('negocios_gta:server:addEvent', function(ev)
     local serverTime = os.time() * 1000
     ev.createdAt = serverTime
     
-    MySQL:insert('INSERT INTO JorgeDev_business_events (id, businessId, title, description, eventTime, image, isActive, price, location, locationX, locationY, requirements, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', {
+    MySQL:insert('INSERT INTO JorgeDev_business_events (id, businessId, title, description, eventTime, image, isActive, price, location, locationX, locationY, requirements, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FROM_UNIXTIME(? / 1000))', {
         ev.id, ev.businessId, ev.title, ev.description, ev.eventTime or ev.time, ev.image or '', 1, ev.price or 'Gratis', ev.location or '', ev.locationX, ev.locationY, ev.requirements or '', ev.createdAt
     }, function()
         MySQL:single('SELECT * FROM JorgeDev_business_events WHERE id = ?', { ev.id }, function(savedEv)
